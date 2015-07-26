@@ -1,31 +1,135 @@
 ---
-title: "DASI-PracticalMachineLearning Project"
+title: "Practical Machine Learning : Prediction Project"
 author: "UshaKiran.Kota"
 date: "July 23, 2015"
 output: html_document
 ---
-```{r}
+```{r,load_libraries,warning=F,message=FALSE}
+library(AppliedPredictiveModeling)
+library(caret)
+library(rpart)
+library(rattle)
+library(pgmm)
+library(ElemStatLearn)
+library(tree)
 
-#install.packages("doParallel")
 library(doParallel)
 registerDoParallel(cores=2)
-#summary(cars)
+
+
+
+#ref:https://class.coursera.org/predmachlearn-030/forum/thread?thread_id=25
+#to save the models to cache
+#saveRDS(myVariableName, file="myFile.rds")
+
+#to reload your training models from cache
+#saveRDS(myVariableName, file="myFile.rds")
+
 ```
 
 
+## **1. Read Training and Test Data**
+subset data to remove columns that have  more than 50% of total rows as NAs (apply the same to train and test sets)
+```{r,read_data,cache=TRUE}
+#Assumes tha the csv files are in the user's working directory
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+training <- read.csv("pml-training.csv",header=TRUE, sep=",", na.strings=c("NA", "-", "?"), dec=".", strip.white=TRUE)
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+testing <- read.csv("pml-testing.csv",header=TRUE, sep=",", na.strings=c("NA", "-", "?"), dec=".", strip.white=TRUE)
 
-```{r}
-summary(cars)
+
+#from among the 92 predictors, we need to choose the most important one for the classification model
 ```
+## **2. select feature set based on an algorithm**
+### 1. Eliminate redundant features 
+
+
+```{r, Elim_Redun,echo=T}
+#ref://http://machinelearningmastery.com/feature-selection-with-the-caret-r-package/
+set.seed(7)
+
+# calculate correlation matrix
+#select further only numeric ,integer columns, except the "classe" variable
+
+training.nona<-training[,colSums(is.na(training)) < 0.5*nrow(training)]
+
+testing.nona<-testing[,colSums(is.na(testing)) < 0.5*nrow(testing)]
+
+training.num<-training.nona[, sapply(training.nona[,-93], class) %in% c('numeric', 'integer')]
+
+#remove cols 1:4 -- not very useful for the model
+training.nf<-training.num[,-c(1:4)]
+
+testing.num<-testing.nona[, sapply(testing.nona, class) %in% c('numeric', 'integer')]
+testing.nf<-testing.num[,-c(1:4)]
+
+
+#reduces the train and test set to 53 variables
+
+#now remove the highly correlated features
+
+correlationMatrix <- cor(training.nf[,-53])
+
+correlationMatrix.t <- cor(testing.nf)
+
+# find attributes that are highly corrected (ideally >0.75)
+highlyCorrelated.tr <- findCorrelation(correlationMatrix, cutoff=0.9)
+# print indexes of highly correlated attributes
+print(highlyCorrelated.tr)
+
+
+highlyCorrelated.test<- findCorrelation(correlationMatrix.t, cutoff=0.9)
+
+print(highlyCorrelated.test)
+
+training.nf$classe <-as.factor(training.nf$classe)
+
+training.nf<-training.nf[, -highlyCorrelated.tr]
+
+testing.nf<-testing.nf[, -highlyCorrelated.test]
+
+
+
+```
+### 2. Model Train using K-fold CV
 
 You can also embed plots, for example:
 
-```{r, echo=FALSE}
-plot(cars)
-```
+```{r, train_model,cache = T,echo=T}
+#ref:https://class.coursera.org/predmachlearn-030/forum/thread?thread_id=25
+set.seed(876)
+inTraining <- createDataPartition(training.nf$classe, p = .60, list = FALSE)
+rf.train <- training.nf[ inTraining,]
+rf.test  <- training.nf[-inTraining,]
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# train.sample <- training.nf[sample(1:nrow(training.nf), 6000,
+#                                      replace=FALSE),]
+
+ fitControl <- trainControl(## 5-fold CV
+  method = "repeatedcv",
+  number = 5,
+  ## repeated once
+  repeats = 1,
+  verboseIter =F )
+ 
+# rf.model <- train(classe~., data=rf.train , method="rf",prox=T,trControl=fitControl)
+# saveRDS(rf.model, file="myFile.rds")
+
+```
+### 3. Check the accuracy and Variable Importance
+```{r, Var_Imp,cache = T,echo=T}
+
+# print(rf.model$results)
+# # # estimate variable importance
+# importance <- varImp(rf.model)
+# # # summarize importance
+# print(importance)
+# # plot importance
+# plot(importance)
+
+```
+### 4. Check the Confusion matrix
+```{r, Cf_matric,cache = T,echo=T}
+
+
+```
